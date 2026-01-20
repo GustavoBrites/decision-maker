@@ -3,7 +3,6 @@ import {
   authApi, 
   tasksApi, 
   goalApi, 
-  budgetApi, 
   decisionApi, 
   resetMockData,
 } from '@/lib/api';
@@ -89,7 +88,8 @@ describe('Tasks API', () => {
     expect(tasks[0]).toHaveProperty('id');
     expect(tasks[0]).toHaveProperty('title');
     expect(tasks[0]).toHaveProperty('estimatedMinutes');
-    expect(tasks[0]).toHaveProperty('category');
+    expect(tasks[0]).toHaveProperty('goalId');
+    expect(tasks[0]).toHaveProperty('energy');
   });
 
   it('should add a new task', async () => {
@@ -97,12 +97,14 @@ describe('Tasks API', () => {
     const newTask = await tasksApi.addTask({
       title: 'New Test Task',
       estimatedMinutes: 25,
-      category: 'neutral',
+      goalId: null,
+      energy: 'medium',
     });
 
     expect(newTask.id).toBeDefined();
     expect(newTask.title).toBe('New Test Task');
     expect(newTask.completed).toBe(false);
+    expect(newTask.energy).toBe('medium');
 
     const updatedTasks = await tasksApi.getTasks();
     expect(updatedTasks.length).toBe(initialTasks.length + 1);
@@ -130,54 +132,90 @@ describe('Tasks API', () => {
   });
 });
 
-describe('Goal and Budget APIs', () => {
+describe('Goals API', () => {
   beforeEach(() => {
     resetMockData();
   });
 
-  it('should fetch weekly goal', async () => {
-    const goal = await goalApi.getWeeklyGoal();
+  it('should fetch weekly goals', async () => {
+    const goals = await goalApi.getWeeklyGoals();
     
-    expect(goal.id).toBeDefined();
-    expect(goal.title).toBeDefined();
-    expect(goal.targetMinutes).toBeGreaterThan(0);
-    expect(goal.completedMinutes).toBeDefined();
+    expect(goals.length).toBe(3);
+    expect(goals[0]).toHaveProperty('id');
+    expect(goals[0]).toHaveProperty('title');
+    expect(goals[0]).toHaveProperty('type');
+    expect(goals[0]).toHaveProperty('targetMinutes');
+    expect(goals[0]).toHaveProperty('completedMinutes');
   });
 
-  it('should fetch weekly budget', async () => {
-    const budget = await budgetApi.getWeeklyBudget();
+  it('should have body, mind, and soul goals by default', async () => {
+    const goals = await goalApi.getWeeklyGoals();
     
-    expect(budget.id).toBeDefined();
-    expect(budget.category).toBeDefined();
-    expect(budget.limit).toBeGreaterThan(0);
-    expect(budget.spent).toBeDefined();
+    const types = goals.map(g => g.type);
+    expect(types).toContain('body');
+    expect(types).toContain('mind');
+    expect(types).toContain('soul');
+  });
+
+  it('should update a goal', async () => {
+    const goals = await goalApi.getWeeklyGoals();
+    const goalToUpdate = goals[0];
+    
+    const updatedGoal = await goalApi.updateGoal(goalToUpdate.id, {
+      title: 'Updated Goal',
+      targetMinutes: 200,
+    });
+    
+    expect(updatedGoal.title).toBe('Updated Goal');
+    expect(updatedGoal.targetMinutes).toBe(200);
+  });
+
+  it('should add a new goal', async () => {
+    const newGoal = await goalApi.addGoal({
+      title: 'New Custom Goal',
+      targetMinutes: 100,
+      type: 'custom',
+    });
+    
+    expect(newGoal.id).toBeDefined();
+    expect(newGoal.title).toBe('New Custom Goal');
+    expect(newGoal.completedMinutes).toBe(0);
+    
+    const goals = await goalApi.getWeeklyGoals();
+    expect(goals.length).toBe(4);
+  });
+
+  it('should not allow more than 5 goals', async () => {
+    await goalApi.addGoal({ title: 'Goal 4', targetMinutes: 60, type: 'custom' });
+    await goalApi.addGoal({ title: 'Goal 5', targetMinutes: 60, type: 'custom' });
+    
+    await expect(
+      goalApi.addGoal({ title: 'Goal 6', targetMinutes: 60, type: 'custom' })
+    ).rejects.toThrow('Maximum of 5 goals allowed');
+  });
+
+  it('should not allow fewer than 3 goals', async () => {
+    const goals = await goalApi.getWeeklyGoals();
+    
+    await expect(goalApi.deleteGoal(goals[0].id)).rejects.toThrow('Minimum of 3 goals required');
   });
 
   it('should update goal progress when completing goal task', async () => {
-    const initialGoal = await goalApi.getWeeklyGoal();
-    const tasks = await tasksApi.getTasks();
-    const goalTask = tasks.find(t => t.category === 'goal' && !t.completed);
+    const initialGoals = await goalApi.getWeeklyGoals();
+    const bodyGoal = initialGoals.find(g => g.type === 'body')!;
+    const initialCompleted = bodyGoal.completedMinutes;
     
-    if (goalTask) {
-      await tasksApi.completeTask(goalTask.id);
-      const updatedGoal = await goalApi.getWeeklyGoal();
+    const tasks = await tasksApi.getTasks();
+    const bodyTask = tasks.find(t => t.goalId === bodyGoal.id && !t.completed);
+    
+    if (bodyTask) {
+      await tasksApi.completeTask(bodyTask.id);
+      const updatedGoals = await goalApi.getWeeklyGoals();
+      const updatedBodyGoal = updatedGoals.find(g => g.id === bodyGoal.id)!;
       
-      expect(updatedGoal.completedMinutes).toBe(
-        initialGoal.completedMinutes + goalTask.estimatedMinutes
+      expect(updatedBodyGoal.completedMinutes).toBe(
+        initialCompleted + bodyTask.estimatedMinutes
       );
-    }
-  });
-
-  it('should update budget when completing task with cost', async () => {
-    const initialBudget = await budgetApi.getWeeklyBudget();
-    const tasks = await tasksApi.getTasks();
-    const paidTask = tasks.find(t => t.cost && t.cost > 0 && !t.completed);
-    
-    if (paidTask) {
-      await tasksApi.completeTask(paidTask.id);
-      const updatedBudget = await budgetApi.getWeeklyBudget();
-      
-      expect(updatedBudget.spent).toBe(initialBudget.spent + paidTask.cost!);
     }
   });
 });
@@ -187,8 +225,8 @@ describe('Decision API', () => {
     resetMockData();
   });
 
-  it('should return a recommendation for available time', async () => {
-    const recommendation = await decisionApi.getRecommendation(60);
+  it('should return a recommendation for available time and energy', async () => {
+    const recommendation = await decisionApi.getRecommendation(60, 'high');
     
     expect(recommendation).not.toBeNull();
     expect(recommendation?.task).toBeDefined();
@@ -197,32 +235,39 @@ describe('Decision API', () => {
   });
 
   it('should prefer goal tasks over neutral tasks', async () => {
-    const recommendation = await decisionApi.getRecommendation(120);
+    const recommendation = await decisionApi.getRecommendation(120, 'high');
     
-    // With enough time, should recommend a goal task first
-    expect(recommendation?.task.category).toBe('goal');
+    // With enough time and energy, should recommend a goal task first
+    expect(recommendation?.task.goalId).not.toBeNull();
   });
 
-  it('should respect budget constraints', async () => {
-    const budget = await budgetApi.getWeeklyBudget();
-    const remainingBudget = budget.limit - budget.spent;
+  it('should respect energy constraints - low energy', async () => {
+    const recommendation = await decisionApi.getRecommendation(300, 'low');
     
-    const recommendation = await decisionApi.getRecommendation(300);
+    if (recommendation) {
+      // Low energy users should only get low energy tasks
+      expect(recommendation.task.energy).toBe('low');
+    }
+  });
+
+  it('should respect energy constraints - medium energy', async () => {
+    const recommendation = await decisionApi.getRecommendation(300, 'medium');
     
-    if (recommendation?.task.cost) {
-      expect(recommendation.task.cost).toBeLessThanOrEqual(remainingBudget);
+    if (recommendation) {
+      // Medium energy users should get low or medium energy tasks
+      expect(['low', 'medium']).toContain(recommendation.task.energy);
     }
   });
 
   it('should return null when no tasks fit constraints', async () => {
     // Very short time that no task fits
-    const recommendation = await decisionApi.getRecommendation(1);
+    const recommendation = await decisionApi.getRecommendation(1, 'high');
     
     expect(recommendation).toBeNull();
   });
 
   it('should provide an alternative when available', async () => {
-    const recommendation = await decisionApi.getRecommendation(120);
+    const recommendation = await decisionApi.getRecommendation(120, 'high');
     
     // With multiple tasks available, should have an alternative
     expect(recommendation?.alternative).toBeDefined();
@@ -230,7 +275,7 @@ describe('Decision API', () => {
   });
 
   it('should respect time constraints', async () => {
-    const recommendation = await decisionApi.getRecommendation(15);
+    const recommendation = await decisionApi.getRecommendation(15, 'high');
     
     if (recommendation) {
       expect(recommendation.task.estimatedMinutes).toBeLessThanOrEqual(15);

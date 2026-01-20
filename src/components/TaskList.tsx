@@ -20,19 +20,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Clock, DollarSign, Target, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react';
-import type { Task } from '@/lib/api';
+import { Plus, Clock, Target, CheckCircle2, RotateCcw, Trash2, Zap, Heart, Brain, Sparkles } from 'lucide-react';
+import type { Task, WeeklyGoal, EnergyLevel } from '@/lib/api';
 
 interface TaskListProps {
   tasks: Task[];
+  goals: WeeklyGoal[];
   onAddTask: (task: Omit<Task, 'id' | 'completed' | 'completedMinutes'>) => Promise<void>;
   onCompleteTask: (taskId: string) => Promise<void>;
   onResetTask: (taskId: string) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
 }
 
+const energyLabels: Record<EnergyLevel, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
+
+const energyColors: Record<EnergyLevel, string> = {
+  low: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  high: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+};
+
+const goalTypeIcons: Record<string, React.ReactNode> = {
+  body: <Heart className="w-3 h-3" />,
+  mind: <Brain className="w-3 h-3" />,
+  soul: <Sparkles className="w-3 h-3" />,
+  custom: <Target className="w-3 h-3" />,
+};
+
 const TaskList: React.FC<TaskListProps> = ({ 
-  tasks, 
+  tasks,
+  goals,
   onAddTask, 
   onCompleteTask, 
   onResetTask,
@@ -45,7 +66,8 @@ const TaskList: React.FC<TaskListProps> = ({
   const [title, setTitle] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [cost, setCost] = useState('');
-  const [category, setCategory] = useState<'goal' | 'neutral'>('neutral');
+  const [goalId, setGoalId] = useState<string>('none');
+  const [energy, setEnergy] = useState<EnergyLevel>('medium');
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,14 +78,16 @@ const TaskList: React.FC<TaskListProps> = ({
         title,
         estimatedMinutes: parseInt(estimatedMinutes, 10),
         cost: cost ? parseFloat(cost) : undefined,
-        category,
+        goalId: goalId === 'none' ? null : goalId,
+        energy,
       });
       
       // Reset form
       setTitle('');
       setEstimatedMinutes('');
       setCost('');
-      setCategory('neutral');
+      setGoalId('none');
+      setEnergy('medium');
       setIsAddDialogOpen(false);
     } finally {
       setIsLoading(false);
@@ -128,17 +152,36 @@ const TaskList: React.FC<TaskListProps> = ({
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="task-category">Category</Label>
-                <Select value={category} onValueChange={(v) => setCategory(v as 'goal' | 'neutral')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="goal">Goal-related</SelectItem>
-                    <SelectItem value="neutral">Neutral</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="task-goal">Related Goal</Label>
+                  <Select value={goalId} onValueChange={setGoalId}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No goal (neutral)</SelectItem>
+                      {goals.map((goal) => (
+                        <SelectItem key={goal.id} value={goal.id}>
+                          {goal.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="task-energy">Energy Required</Label>
+                  <Select value={energy} onValueChange={(v) => setEnergy(v as EnergyLevel)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <DialogFooter>
                 <Button type="submit" disabled={isLoading}>
@@ -160,7 +203,8 @@ const TaskList: React.FC<TaskListProps> = ({
             {incompleteTasks.map((task) => (
               <TaskItem 
                 key={task.id} 
-                task={task} 
+                task={task}
+                goals={goals}
                 onComplete={onCompleteTask}
                 onReset={onResetTask}
                 onDelete={onDeleteTask}
@@ -179,7 +223,8 @@ const TaskList: React.FC<TaskListProps> = ({
               {completedTasks.map((task) => (
                 <TaskItem 
                   key={task.id} 
-                  task={task} 
+                  task={task}
+                  goals={goals}
                   onComplete={onCompleteTask}
                   onReset={onResetTask}
                   onDelete={onDeleteTask}
@@ -195,13 +240,16 @@ const TaskList: React.FC<TaskListProps> = ({
 
 interface TaskItemProps {
   task: Task;
+  goals: WeeklyGoal[];
   onComplete: (taskId: string) => Promise<void>;
   onReset: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
 }
 
-const TaskItem: React.FC<TaskItemProps> = ({ task, onComplete, onReset, onDelete }) => {
+const TaskItem: React.FC<TaskItemProps> = ({ task, goals, onComplete, onReset, onDelete }) => {
   const [isLoading, setIsLoading] = useState(false);
+  
+  const linkedGoal = task.goalId ? goals.find(g => g.id === task.goalId) : null;
 
   const handleAction = async (action: () => Promise<void>) => {
     setIsLoading(true);
@@ -245,23 +293,29 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onComplete, onReset, onDelete
             <Clock className="w-3 h-3" />
             {task.estimatedMinutes} min
           </span>
-          {task.cost !== undefined && task.cost > 0 && (
-            <span className="flex items-center gap-1">
-              <DollarSign className="w-3 h-3" />
-              {task.cost}
-            </span>
-          )}
+          <span className="flex items-center gap-1">
+            <Zap className="w-3 h-3" />
+            {energyLabels[task.energy]}
+          </span>
         </div>
       </div>
 
-      {/* Category badge */}
-      <Badge 
-        variant={task.category === 'goal' ? 'default' : 'secondary'}
-        className="shrink-0"
-      >
-        {task.category === 'goal' && <Target className="w-3 h-3 mr-1" />}
-        {task.category === 'goal' ? 'Goal' : 'Neutral'}
-      </Badge>
+      {/* Goal/Energy badges */}
+      <div className="flex items-center gap-2 shrink-0">
+        <Badge className={`${energyColors[task.energy]} border-0`}>
+          {energyLabels[task.energy]}
+        </Badge>
+        {linkedGoal ? (
+          <Badge variant="default" className="shrink-0">
+            {goalTypeIcons[linkedGoal.type]}
+            <span className="ml-1">{linkedGoal.type.charAt(0).toUpperCase() + linkedGoal.type.slice(1)}</span>
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="shrink-0">
+            Neutral
+          </Badge>
+        )}
+      </div>
 
       {/* Delete button */}
       <Button

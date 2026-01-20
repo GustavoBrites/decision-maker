@@ -7,12 +7,17 @@ export interface User {
   email: string;
 }
 
+export type EnergyLevel = 'low' | 'medium' | 'high';
+
+export type GoalType = 'body' | 'mind' | 'soul' | 'custom';
+
 export interface Task {
   id: string;
   title: string;
   estimatedMinutes: number;
   cost?: number;
-  category: 'goal' | 'neutral';
+  goalId: string | null; // Link to a specific goal, or null for neutral tasks
+  energy: EnergyLevel;
   completed: boolean;
   completedMinutes?: number;
 }
@@ -20,15 +25,9 @@ export interface Task {
 export interface WeeklyGoal {
   id: string;
   title: string;
+  type: GoalType;
   targetMinutes: number;
   completedMinutes: number;
-}
-
-export interface WeeklyBudget {
-  id: string;
-  category: string;
-  limit: number;
-  spent: number;
 }
 
 export interface Recommendation {
@@ -43,30 +42,43 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // In-memory storage (simulates database)
 let currentUser: User | null = null;
-let tasks: Task[] = [
-  { id: '1', title: 'Morning jog', estimatedMinutes: 30, category: 'goal', completed: false },
-  { id: '2', title: 'Read a book chapter', estimatedMinutes: 20, category: 'neutral', completed: false },
-  { id: '3', title: 'Yoga session', estimatedMinutes: 45, category: 'goal', completed: false },
-  { id: '4', title: 'Coffee with friend', estimatedMinutes: 60, cost: 15, category: 'neutral', completed: false },
-  { id: '5', title: 'Gym workout', estimatedMinutes: 60, cost: 0, category: 'goal', completed: false },
-  { id: '6', title: 'Watch a movie', estimatedMinutes: 120, cost: 12, category: 'neutral', completed: false },
-  { id: '7', title: 'Quick stretch', estimatedMinutes: 10, category: 'goal', completed: false },
-  { id: '8', title: 'Meditation', estimatedMinutes: 15, category: 'goal', completed: false },
+
+let weeklyGoals: WeeklyGoal[] = [
+  {
+    id: 'goal-body',
+    title: 'Exercise 150 minutes',
+    type: 'body',
+    targetMinutes: 150,
+    completedMinutes: 45,
+  },
+  {
+    id: 'goal-mind',
+    title: 'Read 60 minutes',
+    type: 'mind',
+    targetMinutes: 60,
+    completedMinutes: 20,
+  },
+  {
+    id: 'goal-soul',
+    title: 'Meditation 30 minutes',
+    type: 'soul',
+    targetMinutes: 30,
+    completedMinutes: 0,
+  },
 ];
 
-let weeklyGoal: WeeklyGoal = {
-  id: '1',
-  title: 'Exercise 150 minutes',
-  targetMinutes: 150,
-  completedMinutes: 45,
-};
-
-let weeklyBudget: WeeklyBudget = {
-  id: '1',
-  category: 'Entertainment & Wellness',
-  limit: 100,
-  spent: 27,
-};
+let tasks: Task[] = [
+  { id: '1', title: 'Morning jog', estimatedMinutes: 30, goalId: 'goal-body', energy: 'high', completed: false },
+  { id: '2', title: 'Read a book chapter', estimatedMinutes: 20, goalId: 'goal-mind', energy: 'low', completed: false },
+  { id: '3', title: 'Yoga session', estimatedMinutes: 45, goalId: 'goal-body', energy: 'medium', completed: false },
+  { id: '4', title: 'Coffee with friend', estimatedMinutes: 60, cost: 15, goalId: null, energy: 'low', completed: false },
+  { id: '5', title: 'Gym workout', estimatedMinutes: 60, cost: 0, goalId: 'goal-body', energy: 'high', completed: false },
+  { id: '6', title: 'Watch a documentary', estimatedMinutes: 90, goalId: 'goal-mind', energy: 'low', completed: false },
+  { id: '7', title: 'Quick stretch', estimatedMinutes: 10, goalId: 'goal-body', energy: 'low', completed: false },
+  { id: '8', title: 'Meditation', estimatedMinutes: 15, goalId: 'goal-soul', energy: 'low', completed: false },
+  { id: '9', title: 'Journaling', estimatedMinutes: 20, goalId: 'goal-soul', energy: 'low', completed: false },
+  { id: '10', title: 'Listen to podcast', estimatedMinutes: 30, goalId: 'goal-mind', energy: 'low', completed: false },
+];
 
 // Auth API
 export const authApi = {
@@ -162,13 +174,11 @@ export const tasksApi = {
     };
     
     // Update goal progress if it's a goal-related task
-    if (task.category === 'goal') {
-      weeklyGoal.completedMinutes += minutes;
-    }
-    
-    // Update budget if task has a cost
-    if (task.cost) {
-      weeklyBudget.spent += task.cost;
+    if (task.goalId) {
+      const goalIndex = weeklyGoals.findIndex(g => g.id === task.goalId);
+      if (goalIndex !== -1) {
+        weeklyGoals[goalIndex].completedMinutes += minutes;
+      }
     }
     
     return tasks[taskIndex];
@@ -191,11 +201,11 @@ export const tasksApi = {
     
     // Reverse the completion effects
     if (task.completed) {
-      if (task.category === 'goal' && task.completedMinutes) {
-        weeklyGoal.completedMinutes -= task.completedMinutes;
-      }
-      if (task.cost) {
-        weeklyBudget.spent -= task.cost;
+      if (task.goalId && task.completedMinutes) {
+        const goalIndex = weeklyGoals.findIndex(g => g.id === task.goalId);
+        if (goalIndex !== -1) {
+          weeklyGoals[goalIndex].completedMinutes -= task.completedMinutes;
+        }
       }
     }
     
@@ -209,58 +219,116 @@ export const tasksApi = {
   },
 };
 
-// Goal API
+// Goals API
 export const goalApi = {
-  async getWeeklyGoal(): Promise<WeeklyGoal> {
+  async getWeeklyGoals(): Promise<WeeklyGoal[]> {
     await delay(200);
-    return { ...weeklyGoal };
+    return [...weeklyGoals];
+  },
+
+  async getWeeklyGoal(): Promise<WeeklyGoal> {
+    // Backward compatibility - return first goal
+    await delay(200);
+    return { ...weeklyGoals[0] };
+  },
+
+  async addGoal(goal: Omit<WeeklyGoal, 'id' | 'completedMinutes'>): Promise<WeeklyGoal> {
+    await delay(300);
+    
+    if (weeklyGoals.length >= 5) {
+      throw new Error('Maximum of 5 goals allowed');
+    }
+    
+    const newGoal: WeeklyGoal = {
+      ...goal,
+      id: crypto.randomUUID(),
+      completedMinutes: 0,
+    };
+    
+    weeklyGoals.push(newGoal);
+    return newGoal;
+  },
+
+  async updateGoal(goalId: string, updates: Partial<Omit<WeeklyGoal, 'id'>>): Promise<WeeklyGoal> {
+    await delay(300);
+    
+    const goalIndex = weeklyGoals.findIndex(g => g.id === goalId);
+    if (goalIndex === -1) {
+      throw new Error('Goal not found');
+    }
+    
+    weeklyGoals[goalIndex] = { ...weeklyGoals[goalIndex], ...updates };
+    return { ...weeklyGoals[goalIndex] };
+  },
+
+  async deleteGoal(goalId: string): Promise<void> {
+    await delay(200);
+    
+    if (weeklyGoals.length <= 3) {
+      throw new Error('Minimum of 3 goals required');
+    }
+    
+    // Remove the goal
+    weeklyGoals = weeklyGoals.filter(g => g.id !== goalId);
+    
+    // Clear goalId from tasks that had this goal
+    tasks = tasks.map(t => t.goalId === goalId ? { ...t, goalId: null } : t);
   },
 
   async updateWeeklyGoal(updates: Partial<WeeklyGoal>): Promise<WeeklyGoal> {
+    // Backward compatibility
     await delay(300);
-    weeklyGoal = { ...weeklyGoal, ...updates };
-    return { ...weeklyGoal };
-  },
-};
-
-// Budget API
-export const budgetApi = {
-  async getWeeklyBudget(): Promise<WeeklyBudget> {
-    await delay(200);
-    return { ...weeklyBudget };
-  },
-
-  async updateWeeklyBudget(updates: Partial<WeeklyBudget>): Promise<WeeklyBudget> {
-    await delay(300);
-    weeklyBudget = { ...weeklyBudget, ...updates };
-    return { ...weeklyBudget };
+    weeklyGoals[0] = { ...weeklyGoals[0], ...updates };
+    return { ...weeklyGoals[0] };
   },
 };
 
 // Decision/Recommendation API
 export const decisionApi = {
-  async getRecommendation(availableMinutes: number): Promise<Recommendation | null> {
+  async getRecommendation(availableMinutes: number, energyLevel: EnergyLevel): Promise<Recommendation | null> {
     await delay(400);
     
-    const remainingBudget = weeklyBudget.limit - weeklyBudget.spent;
     const incompleteTasks = tasks.filter(t => !t.completed);
     
-    // Filter tasks that fit time and budget constraints
+    // Energy level hierarchy: low tasks can be done at any energy, medium at medium+, high only at high
+    const energyMatches = (taskEnergy: EnergyLevel, userEnergy: EnergyLevel): boolean => {
+      const energyOrder: EnergyLevel[] = ['low', 'medium', 'high'];
+      const taskLevel = energyOrder.indexOf(taskEnergy);
+      const userLevel = energyOrder.indexOf(userEnergy);
+      return taskLevel <= userLevel;
+    };
+    
+    // Filter tasks that fit time and energy constraints
     const eligibleTasks = incompleteTasks.filter(task => {
       const fitsTime = task.estimatedMinutes <= availableMinutes;
-      const fitsBudget = !task.cost || task.cost <= remainingBudget;
-      return fitsTime && fitsBudget;
+      const fitsEnergy = energyMatches(task.energy, energyLevel);
+      return fitsTime && fitsEnergy;
     });
     
     if (eligibleTasks.length === 0) {
       return null;
     }
     
-    // Sort by priority: goal tasks first, then by how well they fit the time
+    // Sort by priority: goal tasks first (prioritize goals with more remaining), then by how well they fit the time
     const sortedTasks = [...eligibleTasks].sort((a, b) => {
-      // Goal tasks get priority
-      if (a.category === 'goal' && b.category !== 'goal') return -1;
-      if (b.category === 'goal' && a.category !== 'goal') return 1;
+      // Goal tasks get priority over neutral tasks
+      const aHasGoal = a.goalId !== null;
+      const bHasGoal = b.goalId !== null;
+      
+      if (aHasGoal && !bHasGoal) return -1;
+      if (bHasGoal && !aHasGoal) return 1;
+      
+      // If both have goals, prioritize goals with more remaining time
+      if (aHasGoal && bHasGoal) {
+        const goalA = weeklyGoals.find(g => g.id === a.goalId);
+        const goalB = weeklyGoals.find(g => g.id === b.goalId);
+        
+        if (goalA && goalB) {
+          const remainingA = goalA.targetMinutes - goalA.completedMinutes;
+          const remainingB = goalB.targetMinutes - goalB.completedMinutes;
+          if (remainingA !== remainingB) return remainingB - remainingA; // Higher remaining first
+        }
+      }
       
       // Prefer tasks that better utilize available time
       const aUtilization = a.estimatedMinutes / availableMinutes;
@@ -275,16 +343,15 @@ export const decisionApi = {
     const generateReason = (task: Task, isAlternative = false): string => {
       const reasons: string[] = [];
       
-      if (task.category === 'goal') {
-        const remaining = weeklyGoal.targetMinutes - weeklyGoal.completedMinutes;
-        reasons.push(`contributes ${task.estimatedMinutes} min toward your weekly goal (${remaining} min remaining)`);
+      if (task.goalId) {
+        const goal = weeklyGoals.find(g => g.id === task.goalId);
+        if (goal) {
+          const remaining = goal.targetMinutes - goal.completedMinutes;
+          reasons.push(`contributes ${task.estimatedMinutes} min toward your "${goal.title}" goal (${remaining} min remaining)`);
+        }
       }
       
-      if (task.cost) {
-        reasons.push(`costs $${task.cost} within your budget`);
-      } else {
-        reasons.push('free activity');
-      }
+      reasons.push(`matches your ${task.energy} energy level`);
       
       const timeUtilization = Math.round((task.estimatedMinutes / availableMinutes) * 100);
       reasons.push(`uses ${timeUtilization}% of your available time`);
@@ -308,26 +375,41 @@ export const decisionApi = {
 // Export a function to reset all data (useful for testing)
 export const resetMockData = () => {
   currentUser = null;
-  tasks = [
-    { id: '1', title: 'Morning jog', estimatedMinutes: 30, category: 'goal', completed: false },
-    { id: '2', title: 'Read a book chapter', estimatedMinutes: 20, category: 'neutral', completed: false },
-    { id: '3', title: 'Yoga session', estimatedMinutes: 45, category: 'goal', completed: false },
-    { id: '4', title: 'Coffee with friend', estimatedMinutes: 60, cost: 15, category: 'neutral', completed: false },
-    { id: '5', title: 'Gym workout', estimatedMinutes: 60, cost: 0, category: 'goal', completed: false },
-    { id: '6', title: 'Watch a movie', estimatedMinutes: 120, cost: 12, category: 'neutral', completed: false },
-    { id: '7', title: 'Quick stretch', estimatedMinutes: 10, category: 'goal', completed: false },
-    { id: '8', title: 'Meditation', estimatedMinutes: 15, category: 'goal', completed: false },
+  
+  weeklyGoals = [
+    {
+      id: 'goal-body',
+      title: 'Exercise 150 minutes',
+      type: 'body',
+      targetMinutes: 150,
+      completedMinutes: 45,
+    },
+    {
+      id: 'goal-mind',
+      title: 'Read 60 minutes',
+      type: 'mind',
+      targetMinutes: 60,
+      completedMinutes: 20,
+    },
+    {
+      id: 'goal-soul',
+      title: 'Meditation 30 minutes',
+      type: 'soul',
+      targetMinutes: 30,
+      completedMinutes: 0,
+    },
   ];
-  weeklyGoal = {
-    id: '1',
-    title: 'Exercise 150 minutes',
-    targetMinutes: 150,
-    completedMinutes: 45,
-  };
-  weeklyBudget = {
-    id: '1',
-    category: 'Entertainment & Wellness',
-    limit: 100,
-    spent: 27,
-  };
+  
+  tasks = [
+    { id: '1', title: 'Morning jog', estimatedMinutes: 30, goalId: 'goal-body', energy: 'high', completed: false },
+    { id: '2', title: 'Read a book chapter', estimatedMinutes: 20, goalId: 'goal-mind', energy: 'low', completed: false },
+    { id: '3', title: 'Yoga session', estimatedMinutes: 45, goalId: 'goal-body', energy: 'medium', completed: false },
+    { id: '4', title: 'Coffee with friend', estimatedMinutes: 60, cost: 15, goalId: null, energy: 'low', completed: false },
+    { id: '5', title: 'Gym workout', estimatedMinutes: 60, cost: 0, goalId: 'goal-body', energy: 'high', completed: false },
+    { id: '6', title: 'Watch a documentary', estimatedMinutes: 90, goalId: 'goal-mind', energy: 'low', completed: false },
+    { id: '7', title: 'Quick stretch', estimatedMinutes: 10, goalId: 'goal-body', energy: 'low', completed: false },
+    { id: '8', title: 'Meditation', estimatedMinutes: 15, goalId: 'goal-soul', energy: 'low', completed: false },
+    { id: '9', title: 'Journaling', estimatedMinutes: 20, goalId: 'goal-soul', energy: 'low', completed: false },
+    { id: '10', title: 'Listen to podcast', estimatedMinutes: 30, goalId: 'goal-mind', energy: 'low', completed: false },
+  ];
 };
