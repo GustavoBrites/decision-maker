@@ -3,25 +3,22 @@ import Header from '@/components/Header';
 import ProgressCards from '@/components/ProgressCards';
 import TaskList from '@/components/TaskList';
 import DecisionPanel from '@/components/DecisionPanel';
-import { tasksApi, goalApi, budgetApi, type Task, type WeeklyGoal, type WeeklyBudget } from '@/lib/api';
+import { tasksApi, goalApi, type Task, type WeeklyGoal } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const Dashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [goal, setGoal] = useState<WeeklyGoal | null>(null);
-  const [budget, setBudget] = useState<WeeklyBudget | null>(null);
+  const [goals, setGoals] = useState<WeeklyGoal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [tasksData, goalData, budgetData] = await Promise.all([
+      const [tasksData, goalsData] = await Promise.all([
         tasksApi.getTasks(),
-        goalApi.getWeeklyGoal(),
-        budgetApi.getWeeklyBudget(),
+        goalApi.getWeeklyGoals(),
       ]);
       setTasks(tasksData);
-      setGoal(goalData);
-      setBudget(budgetData);
+      setGoals(goalsData);
     } finally {
       setIsLoading(false);
     }
@@ -39,30 +36,40 @@ const Dashboard: React.FC = () => {
   const handleCompleteTask = async (taskId: string) => {
     const updatedTask = await tasksApi.completeTask(taskId);
     setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
-    // Refresh goal and budget as they may have changed
-    const [goalData, budgetData] = await Promise.all([
-      goalApi.getWeeklyGoal(),
-      budgetApi.getWeeklyBudget(),
-    ]);
-    setGoal(goalData);
-    setBudget(budgetData);
+    // Refresh goals as they may have changed
+    const goalsData = await goalApi.getWeeklyGoals();
+    setGoals(goalsData);
   };
 
   const handleResetTask = async (taskId: string) => {
     const updatedTask = await tasksApi.resetTask(taskId);
     setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
-    // Refresh goal and budget
-    const [goalData, budgetData] = await Promise.all([
-      goalApi.getWeeklyGoal(),
-      budgetApi.getWeeklyBudget(),
-    ]);
-    setGoal(goalData);
-    setBudget(budgetData);
+    // Refresh goals
+    const goalsData = await goalApi.getWeeklyGoals();
+    setGoals(goalsData);
   };
 
   const handleDeleteTask = async (taskId: string) => {
     await tasksApi.deleteTask(taskId);
     setTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  const handleUpdateGoal = async (goalId: string, updates: Partial<Omit<WeeklyGoal, 'id'>>) => {
+    const updatedGoal = await goalApi.updateGoal(goalId, updates);
+    setGoals(prev => prev.map(g => g.id === goalId ? updatedGoal : g));
+  };
+
+  const handleAddGoal = async (goal: Omit<WeeklyGoal, 'id' | 'completedMinutes'>) => {
+    const newGoal = await goalApi.addGoal(goal);
+    setGoals(prev => [...prev, newGoal]);
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    await goalApi.deleteGoal(goalId);
+    setGoals(prev => prev.filter(g => g.id !== goalId));
+    // Refresh tasks as some may have been unlinked
+    const tasksData = await tasksApi.getTasks();
+    setTasks(tasksData);
   };
 
   if (isLoading) {
@@ -71,7 +78,8 @@ const Dashboard: React.FC = () => {
         <Header />
         <main className="container py-8">
           <div className="max-w-4xl mx-auto space-y-8">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Skeleton className="h-40" />
               <Skeleton className="h-40" />
               <Skeleton className="h-40" />
             </div>
@@ -99,21 +107,25 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Progress Cards */}
-          {goal && budget && (
-            <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-              <ProgressCards goal={goal} budget={budget} />
-            </div>
-          )}
+          <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+            <ProgressCards
+              goals={goals}
+              onUpdateGoal={handleUpdateGoal}
+              onAddGoal={handleAddGoal}
+              onDeleteGoal={handleDeleteGoal}
+            />
+          </div>
 
           {/* Decision Panel */}
           <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
-            <DecisionPanel />
+            <DecisionPanel goals={goals} />
           </div>
 
           {/* Task List */}
           <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
             <TaskList
               tasks={tasks}
+              goals={goals}
               onAddTask={handleAddTask}
               onCompleteTask={handleCompleteTask}
               onResetTask={handleResetTask}
