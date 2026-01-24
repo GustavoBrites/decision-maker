@@ -1,0 +1,447 @@
+openapi: 3.0.0
+info:
+  title: Decision Maker API
+  version: 1.0.0
+  description: Backend API for the Decision Maker application, derived from frontend requirements.
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+      required:
+        - id
+        - username
+        - email
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        estimatedMinutes:
+          type: integer
+          minimum: 0
+        cost:
+          type: number
+          minimum: 0
+        goalId:
+          type: string
+          nullable: true
+          description: ID of linked goal or null if neutral
+        energy:
+          type: string
+          enum: [low, medium, high]
+        completed:
+          type: boolean
+        completedMinutes:
+          type: integer
+          minimum: 0
+      required:
+        - id
+        - title
+        - estimatedMinutes
+        - energy
+        - completed
+
+    CreateTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        estimatedMinutes:
+          type: integer
+          minimum: 0
+        cost:
+          type: number
+          minimum: 0
+        goalId:
+          type: string
+          nullable: true
+        energy:
+          type: string
+          enum: [low, medium, high]
+      required:
+        - title
+        - estimatedMinutes
+        - energy
+
+    WeeklyGoal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        type:
+          type: string
+          enum: [body, mind, soul, custom]
+        targetMinutes:
+          type: integer
+          minimum: 0
+        completedMinutes:
+          type: integer
+          minimum: 0
+      required:
+        - id
+        - title
+        - type
+        - targetMinutes
+        - completedMinutes
+
+    CreateGoalRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        type:
+          type: string
+          enum: [body, mind, soul, custom]
+        targetMinutes:
+          type: integer
+          minimum: 0
+      required:
+        - title
+        - type
+        - targetMinutes
+
+    UpdateGoalRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        targetMinutes:
+          type: integer
+          minimum: 0
+
+    Recommendation:
+      type: object
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        reason:
+          type: string
+        alternative:
+          $ref: '#/components/schemas/Task'
+        alternativeReason:
+          type: string
+      required:
+        - task
+        - reason
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Unauthorized Access
+    NotFound:
+      description: Entity Not Found
+    BadRequest:
+      description: Invalid Input
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      summary: User Login
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+              required: [email, password]
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/signup:
+    post:
+      summary: User Signup
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                username:
+                  type: string
+              required: [email, password, username]
+      responses:
+        '200':
+          description: Successful signup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  token:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/logout:
+    post:
+      summary: User Logout
+      tags: [Auth]
+      responses:
+        '200':
+          description: Successful logout
+
+  /auth/me:
+    get:
+      summary: Get Current User
+      tags: [Auth]
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tasks:
+    get:
+      summary: Get All Tasks
+      tags: [Tasks]
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+    post:
+      summary: Create New Task
+      tags: [Tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tasks/{id}:
+    delete:
+      summary: Delete Task
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Task deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tasks/{id}/complete:
+    put:
+      summary: Complete Task
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        description: Optional actual duration
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actualMinutes:
+                  type: integer
+      responses:
+        '200':
+          description: Task completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /tasks/{id}/reset:
+    put:
+      summary: Reset Task
+      tags: [Tasks]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Task reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /goals:
+    get:
+      summary: Get Weekly Goals
+      tags: [Goals]
+      responses:
+        '200':
+          description: List of weekly goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WeeklyGoal'
+    post:
+      summary: Create Goal
+      tags: [Goals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGoalRequest'
+      responses:
+        '201':
+          description: Created goal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyGoal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /goals/{id}:
+    put:
+      summary: Update Goal
+      tags: [Goals]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGoalRequest'
+      responses:
+        '200':
+          description: Updated goal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyGoal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete Goal
+      tags: [Goals]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Goal deleted
+        '400':
+          description: Validation error (e.g. min goals required)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+  /decision/recommendation:
+    get:
+      summary: Get Activity Recommendation
+      tags: [Decision]
+      parameters:
+        - in: query
+          name: availableMinutes
+          schema:
+            type: integer
+          required: true
+        - in: query
+          name: energyLevel
+          schema:
+            type: string
+            enum: [low, medium, high]
+          required: true
+      responses:
+        '200':
+          description: Recommendation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
