@@ -59,6 +59,11 @@ const Dashboard: React.FC = () => {
     setGoals(prev => prev.map(g => g.id === goalId ? updatedGoal : g));
   };
 
+  const handleEditTask = async (taskId: string, updates: Partial<Omit<Task, 'id' | 'completed' | 'completedMinutes'>>) => {
+    const updatedTask = await tasksApi.updateTask(taskId, updates);
+    setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+  };
+
   const handleAddGoal = async (goal: Omit<WeeklyGoal, 'id' | 'completedMinutes'>) => {
     const newGoal = await goalApi.addGoal(goal);
     setGoals(prev => [...prev, newGoal]);
@@ -130,6 +135,7 @@ const Dashboard: React.FC = () => {
               onCompleteTask={handleCompleteTask}
               onResetTask={handleResetTask}
               onDeleteTask={handleDeleteTask}
+              onEditTask={handleEditTask}
             />
           </div>
         </div>

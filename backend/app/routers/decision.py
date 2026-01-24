@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from typing import Optional
-from ..models import Recommendation, EnergyLevel
+from ..models import Recommendation, EnergyLevel, User
 from ..db import db
+from .auth import get_current_user
 import random
 
 router = APIRouter(prefix="/decision", tags=["Decision"])
@@ -9,9 +10,10 @@ router = APIRouter(prefix="/decision", tags=["Decision"])
 @router.get("/recommendation", response_model=Recommendation)
 def get_recommendation(
     availableMinutes: int = Query(..., ge=0),
-    energyLevel: EnergyLevel = Query(...)
+    energyLevel: EnergyLevel = Query(...),
+    user: User = Depends(get_current_user)
 ):
-    tasks = db.get_tasks()
+    tasks = db.get_tasks(user.id)
     
     # Simple recommendation logic
     suitable_tasks = [

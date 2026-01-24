@@ -12,6 +12,8 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",  # Frontend URL
     "http://127.0.0.1:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
 ]
 
 app.add_middleware(
@@ -22,10 +24,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(tasks.router)
-app.include_router(goals.router)
-app.include_router(decision.router)
+app.include_router(auth.router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
+app.include_router(goals.router, prefix="/api")
+app.include_router(decision.router, prefix="/api")
 
 @app.get("/")
 def root():

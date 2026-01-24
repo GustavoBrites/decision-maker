@@ -35,15 +35,21 @@ class Token(BaseModel):
 class TaskBase(BaseModel):
     title: str
     estimatedMinutes: int = Field(ge=0)
-    cost: float = Field(default=0.0, ge=0)
     goalId: Optional[UUID] = None
     energy: EnergyLevel
 
 class CreateTaskRequest(TaskBase):
     pass
 
+class UpdateTaskRequest(BaseModel):
+    title: Optional[str] = None
+    estimatedMinutes: Optional[int] = Field(None, ge=0)
+    energy: Optional[EnergyLevel] = None
+    goalId: Optional[UUID] = None
+
 class Task(TaskBase):
     id: UUID
+    userId: UUID
     completed: bool = False
     completedMinutes: int = Field(default=0, ge=0)
 
@@ -61,6 +67,7 @@ class UpdateGoalRequest(BaseModel):
 
 class WeeklyGoal(WeeklyGoalBase):
     id: UUID
+    userId: UUID
     completedMinutes: int = Field(default=0, ge=0)
 
 class Recommendation(BaseModel):

@@ -1,5 +1,5 @@
-// Centralized mock API layer for Now What? app
-// All "backend" operations are simulated here
+// Centralized API layer for Now What? app
+// Interacts with the backend via fetch
 
 export interface User {
   id: string;
@@ -15,7 +15,6 @@ export interface Task {
   id: string;
   title: string;
   estimatedMinutes: number;
-  cost?: number;
   goalId: string | null; // Link to a specific goal, or null for neutral tasks
   energy: EnergyLevel;
   completed: boolean;
@@ -37,379 +36,221 @@ export interface Recommendation {
   alternativeReason?: string;
 }
 
-// Simulated delay for async operations
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const API_BASE_URL = 'http://localhost:3000/api';
 
-// In-memory storage (simulates database)
-let currentUser: User | null = null;
+const getHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
 
-let weeklyGoals: WeeklyGoal[] = [
-  {
-    id: 'goal-body',
-    title: 'Exercise 150 minutes',
-    type: 'body',
-    targetMinutes: 150,
-    completedMinutes: 45,
-  },
-  {
-    id: 'goal-mind',
-    title: 'Read 60 minutes',
-    type: 'mind',
-    targetMinutes: 60,
-    completedMinutes: 20,
-  },
-  {
-    id: 'goal-soul',
-    title: 'Meditation 30 minutes',
-    type: 'soul',
-    targetMinutes: 30,
-    completedMinutes: 0,
-  },
-];
-
-let tasks: Task[] = [
-  { id: '1', title: 'Morning jog', estimatedMinutes: 30, goalId: 'goal-body', energy: 'high', completed: false },
-  { id: '2', title: 'Read a book chapter', estimatedMinutes: 20, goalId: 'goal-mind', energy: 'low', completed: false },
-  { id: '3', title: 'Yoga session', estimatedMinutes: 45, goalId: 'goal-body', energy: 'medium', completed: false },
-  { id: '4', title: 'Coffee with friend', estimatedMinutes: 60, cost: 15, goalId: null, energy: 'low', completed: false },
-  { id: '5', title: 'Gym workout', estimatedMinutes: 60, cost: 0, goalId: 'goal-body', energy: 'high', completed: false },
-  { id: '6', title: 'Watch a documentary', estimatedMinutes: 90, goalId: 'goal-mind', energy: 'low', completed: false },
-  { id: '7', title: 'Quick stretch', estimatedMinutes: 10, goalId: 'goal-body', energy: 'low', completed: false },
-  { id: '8', title: 'Meditation', estimatedMinutes: 15, goalId: 'goal-soul', energy: 'low', completed: false },
-  { id: '9', title: 'Journaling', estimatedMinutes: 20, goalId: 'goal-soul', energy: 'low', completed: false },
-  { id: '10', title: 'Listen to podcast', estimatedMinutes: 30, goalId: 'goal-mind', energy: 'low', completed: false },
-];
+const handleResponse = async (response: Response) => {
+  if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      // generic unauthorized handling if needed
+    }
+    const errorData = await response.json().catch(() => ({ detail: 'Something went wrong' }));
+    throw new Error(errorData.detail || 'API request failed');
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  return response.json();
+};
 
 // Auth API
 export const authApi = {
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    await delay(500);
-    
-    if (!email || !password) {
-      throw new Error('Email and password are required');
-    }
-    
-    // Simulate validation
-    if (password.length < 4) {
-      throw new Error('Invalid credentials');
-    }
-    
-    const user: User = {
-      id: crypto.randomUUID(),
-      username: email.split('@')[0],
-      email,
-    };
-    
-    currentUser = user;
-    return { user, token: 'mock-jwt-token-' + user.id };
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await handleResponse(response);
+    localStorage.setItem('token', data.token);
+    return data;
   },
 
   async signup(email: string, password: string, username: string): Promise<{ user: User; token: string }> {
-    await delay(600);
-    
-    if (!email || !password || !username) {
-      throw new Error('All fields are required');
-    }
-    
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters');
-    }
-    
-    const user: User = {
-      id: crypto.randomUUID(),
-      username,
-      email,
-    };
-    
-    currentUser = user;
-    return { user, token: 'mock-jwt-token-' + user.id };
+    const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password, username }),
+    });
+    const data = await handleResponse(response);
+    localStorage.setItem('token', data.token);
+    return data;
   },
 
   async logout(): Promise<void> {
-    await delay(200);
-    currentUser = null;
+    const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    await handleResponse(response);
+    localStorage.removeItem('token');
   },
 
   async getCurrentUser(): Promise<User | null> {
-    await delay(100);
-    return currentUser;
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: getHeaders(),
+      });
+      return await handleResponse(response);
+    } catch (e) {
+      console.warn('Failed to get current user', e);
+      localStorage.removeItem('token');
+      return null;
+    }
   },
 };
 
 // Tasks API
 export const tasksApi = {
   async getTasks(): Promise<Task[]> {
-    await delay(300);
-    return [...tasks];
+    const response = await fetch(`${API_BASE_URL}/tasks`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return await handleResponse(response);
   },
 
   async addTask(task: Omit<Task, 'id' | 'completed' | 'completedMinutes'>): Promise<Task> {
-    await delay(300);
-    
-    const newTask: Task = {
-      ...task,
-      id: crypto.randomUUID(),
-      completed: false,
-    };
-    
-    tasks.push(newTask);
-    return newTask;
+    const response = await fetch(`${API_BASE_URL}/tasks`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(task),
+    });
+    return await handleResponse(response);
+  },
+
+  async updateTask(taskId: string, updates: Partial<Omit<Task, 'id' | 'completed' | 'completedMinutes'>>): Promise<Task> {
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(updates),
+    });
+    return await handleResponse(response);
   },
 
   async completeTask(taskId: string, actualMinutes?: number): Promise<Task> {
-    await delay(200);
-    
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) {
-      throw new Error('Task not found');
-    }
-    
-    const task = tasks[taskIndex];
-    const minutes = actualMinutes ?? task.estimatedMinutes;
-    
-    tasks[taskIndex] = {
-      ...task,
-      completed: true,
-      completedMinutes: minutes,
-    };
-    
-    // Update goal progress if it's a goal-related task
-    if (task.goalId) {
-      const goalIndex = weeklyGoals.findIndex(g => g.id === task.goalId);
-      if (goalIndex !== -1) {
-        weeklyGoals[goalIndex].completedMinutes += minutes;
-      }
-    }
-    
-    return tasks[taskIndex];
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/complete`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify({ actualMinutes }),
+    });
+    return await handleResponse(response);
   },
 
   async deleteTask(taskId: string): Promise<void> {
-    await delay(200);
-    tasks = tasks.filter(t => t.id !== taskId);
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    await handleResponse(response);
   },
 
   async resetTask(taskId: string): Promise<Task> {
-    await delay(200);
-    
-    const taskIndex = tasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) {
-      throw new Error('Task not found');
-    }
-    
-    const task = tasks[taskIndex];
-    
-    // Reverse the completion effects
-    if (task.completed) {
-      if (task.goalId && task.completedMinutes) {
-        const goalIndex = weeklyGoals.findIndex(g => g.id === task.goalId);
-        if (goalIndex !== -1) {
-          weeklyGoals[goalIndex].completedMinutes -= task.completedMinutes;
-        }
-      }
-    }
-    
-    tasks[taskIndex] = {
-      ...task,
-      completed: false,
-      completedMinutes: undefined,
-    };
-    
-    return tasks[taskIndex];
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/reset`, {
+      method: 'PUT',
+      headers: getHeaders(),
+    });
+    return await handleResponse(response);
   },
 };
 
 // Goals API
 export const goalApi = {
   async getWeeklyGoals(): Promise<WeeklyGoal[]> {
-    await delay(200);
-    return [...weeklyGoals];
+    const response = await fetch(`${API_BASE_URL}/goals`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return await handleResponse(response);
   },
 
   async getWeeklyGoal(): Promise<WeeklyGoal> {
-    // Backward compatibility - return first goal
-    await delay(200);
-    return { ...weeklyGoals[0] };
+    // Backward compatibility - return first goal from the list
+    const goals = await this.getWeeklyGoals();
+    if (goals.length > 0) {
+      return goals[0];
+    }
+    // If no goals, create a dummy or throw error? 
+    // For now returning a dummy structure or handling empty state in components might be better
+    // But let's verify what the backend returns.
+    // If empty list, we return a mock empty object to avoid crashes if possible, or expect component to handle it.
+    throw new Error("No goals found");
   },
 
   async addGoal(goal: Omit<WeeklyGoal, 'id' | 'completedMinutes'>): Promise<WeeklyGoal> {
-    await delay(300);
-    
-    if (weeklyGoals.length >= 5) {
-      throw new Error('Maximum of 5 goals allowed');
-    }
-    
-    const newGoal: WeeklyGoal = {
-      ...goal,
-      id: crypto.randomUUID(),
-      completedMinutes: 0,
-    };
-    
-    weeklyGoals.push(newGoal);
-    return newGoal;
+    const response = await fetch(`${API_BASE_URL}/goals`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(goal),
+    });
+    return await handleResponse(response);
   },
 
   async updateGoal(goalId: string, updates: Partial<Omit<WeeklyGoal, 'id'>>): Promise<WeeklyGoal> {
-    await delay(300);
-    
-    const goalIndex = weeklyGoals.findIndex(g => g.id === goalId);
-    if (goalIndex === -1) {
-      throw new Error('Goal not found');
-    }
-    
-    weeklyGoals[goalIndex] = { ...weeklyGoals[goalIndex], ...updates };
-    return { ...weeklyGoals[goalIndex] };
+    const response = await fetch(`${API_BASE_URL}/goals/${goalId}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(updates),
+    });
+    return await handleResponse(response);
   },
 
   async deleteGoal(goalId: string): Promise<void> {
-    await delay(200);
-    
-    if (weeklyGoals.length <= 3) {
-      throw new Error('Minimum of 3 goals required');
-    }
-    
-    // Remove the goal
-    weeklyGoals = weeklyGoals.filter(g => g.id !== goalId);
-    
-    // Clear goalId from tasks that had this goal
-    tasks = tasks.map(t => t.goalId === goalId ? { ...t, goalId: null } : t);
+    const response = await fetch(`${API_BASE_URL}/goals/${goalId}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    await handleResponse(response);
   },
 
   async updateWeeklyGoal(updates: Partial<WeeklyGoal>): Promise<WeeklyGoal> {
-    // Backward compatibility
-    await delay(300);
-    weeklyGoals[0] = { ...weeklyGoals[0], ...updates };
-    return { ...weeklyGoals[0] };
+    // This was supporting the single-goal legacy view.
+    // We need to fetch goals and update the first one or logic similar to getWeeklyGoal
+    const goals = await this.getWeeklyGoals();
+    if (goals.length === 0) {
+      throw new Error("No goal to update");
+    }
+    const goalId = goals[0].id;
+    return this.updateGoal(goalId, updates);
   },
 };
 
 // Decision/Recommendation API
 export const decisionApi = {
   async getRecommendation(availableMinutes: number, energyLevel: EnergyLevel): Promise<Recommendation | null> {
-    await delay(400);
-    
-    const incompleteTasks = tasks.filter(t => !t.completed);
-    
-    // Energy level hierarchy: low tasks can be done at any energy, medium at medium+, high only at high
-    const energyMatches = (taskEnergy: EnergyLevel, userEnergy: EnergyLevel): boolean => {
-      const energyOrder: EnergyLevel[] = ['low', 'medium', 'high'];
-      const taskLevel = energyOrder.indexOf(taskEnergy);
-      const userLevel = energyOrder.indexOf(userEnergy);
-      return taskLevel <= userLevel;
-    };
-    
-    // Filter tasks that fit time and energy constraints
-    const eligibleTasks = incompleteTasks.filter(task => {
-      const fitsTime = task.estimatedMinutes <= availableMinutes;
-      const fitsEnergy = energyMatches(task.energy, energyLevel);
-      return fitsTime && fitsEnergy;
+    const params = new URLSearchParams({
+      availableMinutes: availableMinutes.toString(),
+      energyLevel,
     });
-    
-    if (eligibleTasks.length === 0) {
-      return null;
-    }
-    
-    // Sort by priority: goal tasks first (prioritize goals with more remaining), then by how well they fit the time
-    const sortedTasks = [...eligibleTasks].sort((a, b) => {
-      // Goal tasks get priority over neutral tasks
-      const aHasGoal = a.goalId !== null;
-      const bHasGoal = b.goalId !== null;
-      
-      if (aHasGoal && !bHasGoal) return -1;
-      if (bHasGoal && !aHasGoal) return 1;
-      
-      // If both have goals, prioritize goals with more remaining time
-      if (aHasGoal && bHasGoal) {
-        const goalA = weeklyGoals.find(g => g.id === a.goalId);
-        const goalB = weeklyGoals.find(g => g.id === b.goalId);
-        
-        if (goalA && goalB) {
-          const remainingA = goalA.targetMinutes - goalA.completedMinutes;
-          const remainingB = goalB.targetMinutes - goalB.completedMinutes;
-          if (remainingA !== remainingB) return remainingB - remainingA; // Higher remaining first
-        }
-      }
-      
-      // Prefer tasks that better utilize available time
-      const aUtilization = a.estimatedMinutes / availableMinutes;
-      const bUtilization = b.estimatedMinutes / availableMinutes;
-      return bUtilization - aUtilization;
+    const response = await fetch(`${API_BASE_URL}/decision/recommendation?${params}`, {
+      method: 'GET',
+      headers: getHeaders(),
     });
-    
-    const recommendedTask = sortedTasks[0];
-    const alternativeTask = sortedTasks.length > 1 ? sortedTasks[1] : undefined;
-    
-    // Generate reason
-    const generateReason = (task: Task, isAlternative = false): string => {
-      const reasons: string[] = [];
-      
-      if (task.goalId) {
-        const goal = weeklyGoals.find(g => g.id === task.goalId);
-        if (goal) {
-          const remaining = goal.targetMinutes - goal.completedMinutes;
-          reasons.push(`contributes ${task.estimatedMinutes} min toward your "${goal.title}" goal (${remaining} min remaining)`);
-        }
-      }
-      
-      reasons.push(`matches your ${task.energy} energy level`);
-      
-      const timeUtilization = Math.round((task.estimatedMinutes / availableMinutes) * 100);
-      reasons.push(`uses ${timeUtilization}% of your available time`);
-      
-      if (isAlternative) {
-        return `Alternative: ${reasons.join(', ')}.`;
-      }
-      
-      return `This task ${reasons.join(', ')}.`;
-    };
-    
-    return {
-      task: recommendedTask,
-      reason: generateReason(recommendedTask),
-      alternative: alternativeTask,
-      alternativeReason: alternativeTask ? generateReason(alternativeTask, true) : undefined,
-    };
+
+    // API might return 404/null if no recommendation, or a specific structure
+    // Our backend currently always returns a recommendation or a "Free Time" task.
+    // So we just parse JSON.
+    return await handleResponse(response);
   },
 };
 
-// Export a function to reset all data (useful for testing)
+// No longer needed, but keeping for compatibility if imported elsewhere, but empty or warning
 export const resetMockData = () => {
-  currentUser = null;
-  
-  weeklyGoals = [
-    {
-      id: 'goal-body',
-      title: 'Exercise 150 minutes',
-      type: 'body',
-      targetMinutes: 150,
-      completedMinutes: 45,
-    },
-    {
-      id: 'goal-mind',
-      title: 'Read 60 minutes',
-      type: 'mind',
-      targetMinutes: 60,
-      completedMinutes: 20,
-    },
-    {
-      id: 'goal-soul',
-      title: 'Meditation 30 minutes',
-      type: 'soul',
-      targetMinutes: 30,
-      completedMinutes: 0,
-    },
-  ];
-  
-  tasks = [
-    { id: '1', title: 'Morning jog', estimatedMinutes: 30, goalId: 'goal-body', energy: 'high', completed: false },
-    { id: '2', title: 'Read a book chapter', estimatedMinutes: 20, goalId: 'goal-mind', energy: 'low', completed: false },
-    { id: '3', title: 'Yoga session', estimatedMinutes: 45, goalId: 'goal-body', energy: 'medium', completed: false },
-    { id: '4', title: 'Coffee with friend', estimatedMinutes: 60, cost: 15, goalId: null, energy: 'low', completed: false },
-    { id: '5', title: 'Gym workout', estimatedMinutes: 60, cost: 0, goalId: 'goal-body', energy: 'high', completed: false },
-    { id: '6', title: 'Watch a documentary', estimatedMinutes: 90, goalId: 'goal-mind', energy: 'low', completed: false },
-    { id: '7', title: 'Quick stretch', estimatedMinutes: 10, goalId: 'goal-body', energy: 'low', completed: false },
-    { id: '8', title: 'Meditation', estimatedMinutes: 15, goalId: 'goal-soul', energy: 'low', completed: false },
-    { id: '9', title: 'Journaling', estimatedMinutes: 20, goalId: 'goal-soul', energy: 'low', completed: false },
-    { id: '10', title: 'Listen to podcast', estimatedMinutes: 30, goalId: 'goal-mind', energy: 'low', completed: false },
-  ];
+  console.warn("resetMockData called but running in real API mode.");
 };

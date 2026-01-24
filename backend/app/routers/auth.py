@@ -39,16 +39,46 @@ def login(request: LoginRequest):
 def logout():
     return {"message": "Successful logout"}
 
-@router.get("/me", response_model=User)
-def get_me(token: str = "mock_token"): # Simplified for mock
-    # In a real app, we'd validate the Bearer token here
-    # For now, just return the first user or a mock user
-    users = list(db.users.values())
-    if users:
-       return users[0]
-    # Create a default user if none exists for testing convenience
+oauth2_scheme = Depends(lambda: "mock_token") # Placeholder if we used OAuth2Scheme
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    # In a real app we decode the token
+    # For this mock, we'll try to decode it if it looks like a real one, or fallback
     try:
-        return db.create_user(CreateUserRequest(username="test", email="test@example.com", password="password"))
-    except ValueError:
-        return db.get_user_by_email("test@example.com")
+        # If the token is just the "mock-jwt-token-UUID" string from api.ts, we extract the UUID if possible
+        # But api.ts sends "Bearer <token>". FastAPI Depends might handle this if we use OAuth2PasswordBearer
+        # Let's simple parse manually for now as we don't have full setup
+        pass
+    except:
+        pass
+        
+    # Since we are using custom simple token in api.ts "mock-jwt-token-"+user.id
+    # We can't easily extract user from it securely without looking up all users.
+    # But wait, auth.py was creating a JWT: encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    # So we CAN decode it.
+    
+    # We need to handle the header extraction manually or use Header dependency if not using OAuth2PasswordBearer
+    pass
+
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+             raise HTTPException(status_code=401, detail="Could not validate credentials")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
+        
+    user = db.get_user_by_email(email)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+@router.get("/me", response_model=User)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
