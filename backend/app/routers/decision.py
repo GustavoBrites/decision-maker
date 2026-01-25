@@ -1,19 +1,40 @@
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, HTTPException
+from sqlalchemy.orm import Session
 from typing import Optional
-from ..models import Recommendation, EnergyLevel, User
-from ..db import db
-from .auth import get_current_user
+from uuid import uuid4, UUID
 import random
 
+from ..models import Recommendation, EnergyLevel, User, Task
+from ..database import get_db
+from ..db_models import TaskDB
+from .auth import get_current_user
+
 router = APIRouter(prefix="/decision", tags=["Decision"])
+
+
+def task_db_to_pydantic(task_db: TaskDB) -> Task:
+    """Convert SQLAlchemy TaskDB to Pydantic Task model."""
+    return Task(
+        id=UUID(task_db.id),
+        userId=UUID(task_db.user_id),
+        title=task_db.title,
+        estimatedMinutes=task_db.estimated_minutes,
+        energy=task_db.energy,
+        goalId=UUID(task_db.goal_id) if task_db.goal_id else None,
+        completed=task_db.completed,
+        completedMinutes=task_db.completed_minutes
+    )
+
 
 @router.get("/recommendation", response_model=Recommendation)
 def get_recommendation(
     availableMinutes: int = Query(..., ge=0),
     energyLevel: EnergyLevel = Query(...),
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    tasks = db.get_tasks(user.id)
+    task_dbs = db.query(TaskDB).filter(TaskDB.user_id == str(user.id)).all()
+    tasks = [task_db_to_pydantic(t) for t in task_dbs]
     
     # Simple recommendation logic
     suitable_tasks = [
@@ -26,14 +47,14 @@ def get_recommendation(
     if not suitable_tasks:
         # Try finding something with lower energy requirement if user has high energy
         if energyLevel == EnergyLevel.high:
-             suitable_tasks = [
+            suitable_tasks = [
                 t for t in tasks 
                 if not t.completed 
                 and t.energy in [EnergyLevel.medium, EnergyLevel.low]
                 and t.estimatedMinutes <= availableMinutes
             ]
         elif energyLevel == EnergyLevel.medium:
-             suitable_tasks = [
+            suitable_tasks = [
                 t for t in tasks 
                 if not t.completed 
                 and t.energy == EnergyLevel.low
@@ -41,19 +62,15 @@ def get_recommendation(
             ]
 
     if not suitable_tasks:
-        # Return a dummy task or handle error better in real app
-        # For now, let's just return a placeholder or error if strictly needed
-        # But the schema requires a task.
-        # Let's create a "Free Time" task dynamically if nothing else matches
-        from ..models import Task
-        from uuid import uuid4
+        # Return a "Free Time" task dynamically if nothing else matches
         free_time = Task(
-             id=uuid4(),
-             title="Relax and Recharge",
-             estimatedMinutes=availableMinutes,
-             energy=EnergyLevel.low,
-             completed=False,
-             completedMinutes=0
+            id=uuid4(),
+            userId=user.id,
+            title="Relax and Recharge",
+            estimatedMinutes=availableMinutes,
+            energy=EnergyLevel.low,
+            completed=False,
+            completedMinutes=0
         )
         return Recommendation(
             task=free_time,
@@ -62,7 +79,7 @@ def get_recommendation(
             alternativeReason=None
         )
 
-    # Pick a random one for now, or sort by priority
+    # Pick a random one for now
     selected_task = random.choice(suitable_tasks)
     
     # Find an alternative

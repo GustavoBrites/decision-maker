@@ -1,13 +1,21 @@
 from fastapi import APIRouter, HTTPException, Depends
-from ..models import User, CreateUserRequest, LoginRequest, Token
-from ..db import db
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from uuid import UUID
 import jwt
 from datetime import datetime, timedelta
+
+from ..models import User, CreateUserRequest, LoginRequest, Token
+from ..database import get_db
+from ..db_models import UserDB
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 SECRET_KEY = "mock_secret_key"
 ALGORITHM = "HS256"
+
+security = HTTPBearer()
+
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -16,69 +24,70 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
+def user_db_to_pydantic(user_db: UserDB) -> User:
+    """Convert SQLAlchemy UserDB to Pydantic User model."""
+    return User(id=UUID(user_db.id), username=user_db.username, email=user_db.email)
+
+
 @router.post("/signup", response_model=Token)
-def signup(request: CreateUserRequest):
-    try:
-        user = db.create_user(request)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def signup(request: CreateUserRequest, db: Session = Depends(get_db)):
+    # Check if user already exists
+    existing = db.query(UserDB).filter(UserDB.email == request.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="User already exists")
     
+    # Create new user
+    user_db = UserDB(
+        username=request.username,
+        email=request.email,
+        password_hash=request.password  # In production, hash this!
+    )
+    db.add(user_db)
+    db.commit()
+    db.refresh(user_db)
+    
+    user = user_db_to_pydantic(user_db)
     token = create_access_token({"sub": user.email})
     return Token(user=user, token=token)
 
+
 @router.post("/login", response_model=Token)
-def login(request: LoginRequest):
-    user = db.get_user_by_email(request.email)
-    if not user or not db.verify_password(request.email, request.password):
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    user_db = db.query(UserDB).filter(UserDB.email == request.email).first()
+    if not user_db or user_db.password_hash != request.password:
         raise HTTPException(status_code=400, detail="Invalid credentials")
     
+    user = user_db_to_pydantic(user_db)
     token = create_access_token({"sub": user.email})
     return Token(user=user, token=token)
+
 
 @router.post("/logout")
 def logout():
     return {"message": "Successful logout"}
 
-oauth2_scheme = Depends(lambda: "mock_token") # Placeholder if we used OAuth2Scheme
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    # In a real app we decode the token
-    # For this mock, we'll try to decode it if it looks like a real one, or fallback
-    try:
-        # If the token is just the "mock-jwt-token-UUID" string from api.ts, we extract the UUID if possible
-        # But api.ts sends "Bearer <token>". FastAPI Depends might handle this if we use OAuth2PasswordBearer
-        # Let's simple parse manually for now as we don't have full setup
-        pass
-    except:
-        pass
-        
-    # Since we are using custom simple token in api.ts "mock-jwt-token-"+user.id
-    # We can't easily extract user from it securely without looking up all users.
-    # But wait, auth.py was creating a JWT: encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    # So we CAN decode it.
-    
-    # We need to handle the header extraction manually or use Header dependency if not using OAuth2PasswordBearer
-    pass
-
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-security = HTTPBearer()
-
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
-             raise HTTPException(status_code=401, detail="Could not validate credentials")
+            raise HTTPException(status_code=401, detail="Could not validate credentials")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
-        
-    user = db.get_user_by_email(email)
-    if user is None:
+    
+    user_db = db.query(UserDB).filter(UserDB.email == email).first()
+    if user_db is None:
         raise HTTPException(status_code=401, detail="User not found")
-    return user
+    
+    return user_db_to_pydantic(user_db)
+
 
 @router.get("/me", response_model=User)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
-

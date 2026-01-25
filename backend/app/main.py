@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import auth, tasks, goals, decision
+from .database import Base, engine
+from . import db_models  # noqa: F401 - Import to register models
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Decision Maker API",
