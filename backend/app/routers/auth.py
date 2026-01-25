@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from ..models import User, CreateUserRequest, LoginRequest, Token
 from ..database import get_db
 from ..db_models import UserDB
+from ..security import hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -41,7 +42,7 @@ def signup(request: CreateUserRequest, db: Session = Depends(get_db)):
     user_db = UserDB(
         username=request.username,
         email=request.email,
-        password_hash=request.password  # In production, hash this!
+        password_hash=hash_password(request.password)
     )
     db.add(user_db)
     db.commit()
@@ -55,7 +56,7 @@ def signup(request: CreateUserRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     user_db = db.query(UserDB).filter(UserDB.email == request.email).first()
-    if not user_db or user_db.password_hash != request.password:
+    if not user_db or not verify_password(request.password, user_db.password_hash):
         raise HTTPException(status_code=400, detail="Invalid credentials")
     
     user = user_db_to_pydantic(user_db)
