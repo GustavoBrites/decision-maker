@@ -79,7 +79,7 @@ const AuthScreen: React.FC = () => {
                 <CardDescription>
                   Enter your credentials to access your account
                 </CardDescription>
-                
+
                 <form onSubmit={handleLogin} className="space-y-4 pt-2">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email</Label>
@@ -121,7 +121,7 @@ const AuthScreen: React.FC = () => {
                 <CardDescription>
                   Start making better daily decisions today
                 </CardDescription>
-                
+
                 <form onSubmit={handleSignup} className="space-y-4 pt-2">
                   <div className="space-y-2">
                     <Label htmlFor="signup-username">Username</Label>
@@ -173,10 +173,7 @@ const AuthScreen: React.FC = () => {
           </Tabs>
         </Card>
 
-        {/* Footer hint */}
-        <p className="text-center text-sm text-muted-foreground">
-          Demo: Use any email and password (4+ chars) to log in
-        </p>
+
       </div>
     </div>
   );
