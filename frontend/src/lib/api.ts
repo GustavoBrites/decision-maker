@@ -252,5 +252,9 @@ export const decisionApi = {
 
 // No longer needed, but keeping for compatibility if imported elsewhere, but empty or warning
 export const resetMockData = () => {
-  console.warn("resetMockData called but running in real API mode.");
+  if (typeof window !== 'undefined' && (window as any).resetMockDataInternal) {
+    (window as any).resetMockDataInternal();
+  } else {
+    console.warn("resetMockData called but running in real API mode.");
+  }
 };

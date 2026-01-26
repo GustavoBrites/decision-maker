@@ -33,14 +33,15 @@ jobs:
         with:
           enable-cache: true
       - name: Setup Python
-        run: uv python install
-        working-directory: backend
+        run: uv python install 3.12
       - name: Install dependencies
         run: uv sync
         working-directory: backend
       - name: Run unit tests
         run: uv run pytest tests
         working-directory: backend
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
 
   test-backend-integration:
     runs-on: ubuntu-latest
@@ -52,14 +53,15 @@ jobs:
         with:
           enable-cache: true
       - name: Setup Python
-        run: uv python install
-        working-directory: backend
+        run: uv python install 3.12
       - name: Install dependencies
         run: uv sync
         working-directory: backend
       - name: Run integration tests
         run: uv run pytest tests_integration
         working-directory: backend
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
 
   deploy:
     runs-on: ubuntu-latest
