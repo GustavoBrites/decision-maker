@@ -4,6 +4,7 @@
 
 <img width="1717" height="902" alt="image" src="https://github.com/user-attachments/assets/8a9c0f57-0dc7-4a37-bb44-6f06b6338206" />
 
+- [**Demo Video**](https://github.com/user-attachments/assets/90a97e4f-2e3a-4d17-b719-4ea9f7286056)
 
 ## Live Deployment
 
