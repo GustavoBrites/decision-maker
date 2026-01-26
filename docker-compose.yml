@@ -14,8 +14,10 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    build: ./backend
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: always
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/decision_maker
@@ -23,15 +25,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
-
-  frontend:
-    build: ./frontend
-    restart: always
-    depends_on:
-      - backend
-    ports:
-      - "8080:80"
+      - "10000:10000"
 
 volumes:
   postgres_data:
