@@ -7,8 +7,8 @@
 
 ## Live Deployment
 
-- [**Frontend Application**](https://decision-maker-l5ez.onrender.com/)
-- [**Backend API Docs**](https://decision-maker-l5ez.onrender.com/docs)
+- **Production App**: [https://decision-maker-l5ez.onrender.com/](https://decision-maker-l5ez.onrender.com/)
+- **Production API Docs**: [https://decision-maker-l5ez.onrender.com/docs](https://decision-maker-l5ez.onrender.com/docs)
 
 **Note:** Services may spin down during inactivity; they will automatically restart upon access.
 
@@ -120,9 +120,9 @@ The **OpenAPI specification** (`openapi.yaml`) serves as the strict contract bet
 ```bash
 docker-compose up --build
 ```
-- **Frontend**: `http://localhost:80`
-- **Backend API**: `http://localhost:8000`
-- **API Docs**: `http://localhost:8000/docs`
+- **Combined URL (Frontend + Backend)**: `http://localhost:10000`
+- **API Base URL**: `http://localhost:10000/api`
+- **Interactive API Docs (Swagger UI)**: `http://localhost:10000/docs`
 
 ## AI-Assisted Development
 
