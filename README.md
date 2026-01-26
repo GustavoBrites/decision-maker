@@ -2,6 +2,9 @@
 
 **What Now?** is a modern web application designed to help users make better daily decisions through structured logic and data-driven insights.
 
+<img width="1717" height="902" alt="image" src="https://github.com/user-attachments/assets/8a9c0f57-0dc7-4a37-bb44-6f06b6338206" />
+
+
 ## Live Deployment
 
 - **Frontend Application**: [https://decision-maker-frontend.onrender.com](https://decision-maker-frontend.onrender.com)
@@ -123,7 +126,7 @@ docker-compose up --build
 
 ## AI-Assisted Development
 
-This project was developed with the assistance of **Antigravity**, an advanced agentic AI coding assistant from Google Deepmind. The initial frontend was scaffolded using **Lovable**, providing a modern and responsive UI foundation.
+This project was developed with the assistance of **Antigravity**, an advanced agentic AI coding assistant from Google Deepmind. The initial frontend was designed using **Lovable**, providing a modern and responsive UI foundation.
 
 ### Agentic Workflow
 Development followed a structured agentic workflow:
