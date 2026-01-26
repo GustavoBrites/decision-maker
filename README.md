@@ -7,8 +7,8 @@
 
 ## Live Deployment
 
-- **Frontend Application**: [https://decision-maker-frontend.onrender.com](https://decision-maker-frontend.onrender.com)
-- **Backend API Docs**: [https://decision-maker-backend.onrender.com/docs](https://decision-maker-backend.onrender.com/docs)
+- [**Frontend Application**](https://decision-maker-l5ez.onrender.com/)
+- [**Backend API Docs**](https://decision-maker-l5ez.onrender.com/docs)
 
 **Note:** Services may spin down during inactivity; they will automatically restart upon access.
 
