@@ -7,16 +7,25 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, get_db
+# Import to register models
+from app.db_models import UserDB, TaskDB, WeeklyGoalDB
 
-# Use a separate SQLite file for integration tests to mimic production closer than in-memory
-TEST_DB_FILE = "test_integration.db"
-SQLALCHEMY_DATABASE_URL = f"sqlite:///./{TEST_DB_FILE}"
+# Use environment DATABASE_URL or fallback to in-memory SQLite for tests
+# In-memory is safer in Docker environments to avoid disk I/O errors
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///:memory:")
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+# Handle SQLite-specific connect args
+connect_args = {}
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        connect_args=connect_args,
+        poolclass=StaticPool,
+    )
+else:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def override_get_db():
@@ -31,25 +40,18 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
     """Create the database and tables once for the whole test session."""
-    from app.db_models import UserDB, TaskDB, WeeklyGoalDB # Import to register models
-    
     # Ensure we start fresh
-    if os.path.exists(TEST_DB_FILE):
-        os.remove(TEST_DB_FILE)
-        
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     yield
     
     # Cleanup after session
     Base.metadata.drop_all(bind=engine)
-    if os.path.exists(TEST_DB_FILE):
-        os.remove(TEST_DB_FILE)
 
 @pytest.fixture(autouse=True)
 def clean_tables():
     """Clear data from tables before each test to ensure isolation."""
     # This is faster than dropping and recreating all tables
-    from app.db_models import UserDB, TaskDB, WeeklyGoalDB
     session = TestingSessionLocal()
     try:
         session.query(TaskDB).delete()
