@@ -6,6 +6,8 @@
 
 - [**Demo Video**](https://github.com/user-attachments/assets/90a97e4f-2e3a-4d17-b719-4ea9f7286056)
 
+(2026-03-10: I've removed the live deployment links, but they were here before!)
+
 ## The Problem
 Decision fatigue is a common modern challenge. Users often struggle with paralyzed choices or lack a structured way to evaluate options for daily dilemmas. **What Now?** solves this by providing a streamlined interface to input options, apply weights, and receive logical recommendations.
 
